@@ -19,10 +19,14 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
 }) => {
   const [displayPercent, setDisplayPercent] = useState(0);
   const [isFirstFrameLoaded, setIsFirstFrameLoaded] = useState(false);
+  const [loadedCount, setLoadedCount] = useState(0);
+  const [isFullyLoaded, setIsFullyLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imagesRef = useRef<(HTMLImageElement | null)[]>(new Array(totalFrames).fill(null));
   const loadedIndicesRef = useRef<Set<number>>(new Set());
+  const loadFailedIndicesRef = useRef<Set<number>>(new Set());
   const smoothedProgressRef = useRef(progress);
   const lastDrawnIndexRef = useRef<number>(-1);
 
@@ -65,29 +69,52 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
     ctx.drawImage(img, dx, dy, dw, dh);
   }, []);
 
-  // Preload individual image with cache tracking
+  // Preload individual image with cache tracking and retry
   const preloadImage = useCallback(
-    (index: number): Promise<HTMLImageElement> => {
+    (index: number, retries = 2): Promise<HTMLImageElement> => {
       return new Promise((resolve) => {
         if (imagesRef.current[index]) {
           resolve(imagesRef.current[index]!);
           return;
         }
 
+        if (loadFailedIndicesRef.current.has(index)) {
+          // Previously failed, try once more after a delay
+          loadFailedIndicesRef.current.delete(index);
+        }
+
         const img = new Image();
-        img.src = getFrameSrc(index);
+        let attempts = 0;
+
+        const tryLoad = () => {
+          attempts++;
+          img.src = '';
+          img.src = getFrameSrc(index);
+        };
+
         img.onload = () => {
           imagesRef.current[index] = img;
           loadedIndicesRef.current.add(index);
+          loadFailedIndicesRef.current.delete(index);
+          setLoadedCount((c) => c + 1);
           if (index === 0) {
             setIsFirstFrameLoaded(true);
             drawImageToCanvas(img);
           }
           resolve(img);
         };
+
         img.onerror = () => {
-          resolve(img);
+          if (attempts < retries) {
+            // Retry with exponential backoff: 500ms, 1500ms...
+            setTimeout(tryLoad, 500 * attempts);
+          } else {
+            loadFailedIndicesRef.current.add(index);
+            resolve(img);
+          }
         };
+
+        tryLoad();
       });
     },
     [getFrameSrc, drawImageToCanvas]
@@ -113,6 +140,16 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
         if (isCancelled) return;
         if (!loadedIndicesRef.current.has(i)) {
           await preloadImage(i);
+        }
+      }
+
+      // Mark as fully loaded (even if some failed)
+      if (!isCancelled) {
+        setIsFullyLoaded(true);
+        // Check if too many frames failed
+        const failedCount = loadFailedIndicesRef.current.size;
+        if (failedCount > totalFrames * 0.5) {
+          setLoadFailed(true);
         }
       }
     };
@@ -201,6 +238,8 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, [drawImageToCanvas]);
 
+  const loadProgress = totalFrames > 0 ? Math.round((loadedCount / totalFrames) * 100) : 0;
+
   return (
     <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none bg-black">
       {/* Static poster image shown until first frame draws */}
@@ -221,6 +260,45 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
           isFirstFrameLoaded ? 'opacity-100' : 'opacity-0'
         }`}
       />
+
+      {/* Loading indicator — shown while frames are loading */}
+      {!isFullyLoaded && loadedCount > 0 && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
+          <div className="flex flex-col items-center gap-2 rounded-xl bg-black/60 border border-white/15 px-4 py-3 backdrop-blur-sm">
+            <div className="h-1 w-20 rounded-full bg-white/20 overflow-hidden">
+              <div
+                className="h-full bg-white/80 transition-all duration-500 rounded-full"
+                style={{ width: `${loadProgress}%` }}
+              />
+            </div>
+            <span className="font-mono text-[10px] text-white/70 select-none">
+              {loadProgress < 100 ? `${loadProgress}%` : 'Tayyor'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Full-load failure notice — shown if too many frames failed */}
+      {loadFailed && posterSrc && (
+        <div className="absolute inset-0 z-30 pointer-events-none">
+          <img
+            src={posterSrc}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover opacity-100"
+          />
+          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 rounded-xl bg-black/60 border border-white/15 px-4 py-3 backdrop-blur-sm">
+            <span className="text-[11px] text-white/80 text-center">
+              Internet ulanishi sekin. Yuklanmoqda...
+            </span>
+            <div className="h-1 w-24 rounded-full bg-white/20 overflow-hidden">
+              <div
+                className="h-full bg-white/60 rounded-full animate-pulse"
+                style={{ width: `${loadProgress}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Dark contrast overlay for crystal clear text */}
       <div className={`absolute inset-0 ${overlayClassName} pointer-events-none`} />
