@@ -26,10 +26,11 @@ export const SectionOne: React.FC<SectionOneProps> = ({
       id="section-hero"
       className="relative h-screen supports-[height:100svh]:h-[100svh] min-h-[580px] w-full overflow-hidden flex flex-col justify-between pt-20 sm:pt-28 pb-12 sm:pb-14 px-4 sm:px-8 md:px-12"
     >
-      {/* Controlled 1.mp4 video background */}
+      {/* Controlled Frame Sequence: 100 frames from /frame/1 */}
       <SectionScrubVideo
-        videoSrc="/1.mp4"
-        posterSrc="/v1_start.jpg"
+        frameFolder="/frame/1"
+        totalFrames={100}
+        posterSrc="/frame/1/frame_001.jpg"
         progress={progress}
         overlayClassName="bg-black/40"
       />

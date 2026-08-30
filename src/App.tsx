@@ -36,17 +36,16 @@ export const AppContent: React.FC = () => {
 
       if (!heroEl || !giftEl || !restEl) return;
 
-      const scrollY = window.scrollY;
-      const giftTop = giftEl.offsetTop;
-      const restTop = restEl.offsetTop;
+      const giftRect = giftEl.getBoundingClientRect();
+      const restRect = restEl.getBoundingClientRect();
 
-      // Sensitivity factor: ~12-14 wheel notches to reach 100%
+      // Sensitivity factor for desktop mouse wheel
       const step = Math.abs(e.deltaY) * 0.0011;
 
       // ZONE 1: Section 1 (Hero)
-      if (scrollY < giftTop - 50) {
+      if (giftRect.top > 80) {
         if (e.deltaY > 0) {
-          if (v1TargetRef.current < 0.99) {
+          if (v1TargetRef.current < 0.98) {
             e.preventDefault();
             v1TargetRef.current = Math.min(1, v1TargetRef.current + step);
             setV1Progress(v1TargetRef.current);
@@ -71,9 +70,9 @@ export const AppContent: React.FC = () => {
       }
 
       // ZONE 2: Section 2 (Gift Box)
-      if (scrollY >= giftTop - 50 && scrollY < restTop - 50) {
+      if (giftRect.top <= 80 && restRect.top > 80) {
         if (e.deltaY > 0) {
-          if (v2TargetRef.current < 0.99) {
+          if (v2TargetRef.current < 0.98) {
             e.preventDefault();
             v2TargetRef.current = Math.min(1, v2TargetRef.current + step);
             setV2Progress(v2TargetRef.current);
@@ -106,15 +105,17 @@ export const AppContent: React.FC = () => {
         return;
       }
 
-      // ZONE 3: Rest of page (Materials, Assortment, Raw materials, Collection, Reviews, FAQ)
-      if (scrollY <= restTop + 10 && e.deltaY < 0) {
-        e.preventDefault();
-        if (!isTransitioningRef.current) {
-          isTransitioningRef.current = true;
-          giftEl.scrollIntoView({ behavior: 'smooth' });
-          setTimeout(() => {
-            isTransitioningRef.current = false;
-          }, 700);
+      // ZONE 3: Rest of page
+      if (restRect.top >= -20 && e.deltaY < 0) {
+        if (window.scrollY <= restEl.offsetTop + 10) {
+          e.preventDefault();
+          if (!isTransitioningRef.current) {
+            isTransitioningRef.current = true;
+            giftEl.scrollIntoView({ behavior: 'smooth' });
+            setTimeout(() => {
+              isTransitioningRef.current = false;
+            }, 700);
+          }
         }
       }
     };
@@ -135,19 +136,21 @@ export const AppContent: React.FC = () => {
       const deltaY = touchStartYRef.current - currentY;
       touchStartYRef.current = currentY;
 
-      const scrollY = window.scrollY;
-      const giftTop = giftEl.offsetTop;
-      const restTop = restEl.offsetTop;
-      const step = Math.abs(deltaY) * 0.0035;
+      const giftRect = giftEl.getBoundingClientRect();
+      const restRect = restEl.getBoundingClientRect();
 
-      if (scrollY < giftTop - 50) {
+      // Mobile touch sensitivity: responsive ~3-4 finger drags to complete
+      const step = Math.abs(deltaY) * 0.005;
+
+      // ZONE 1: Section 1 (Hero)
+      if (giftRect.top > 80) {
         if (deltaY > 0) {
-          if (v1TargetRef.current < 0.99) {
-            e.preventDefault();
+          if (v1TargetRef.current < 0.98) {
+            if (e.cancelable) e.preventDefault();
             v1TargetRef.current = Math.min(1, v1TargetRef.current + step);
             setV1Progress(v1TargetRef.current);
           } else {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             if (!isTransitioningRef.current) {
               isTransitioningRef.current = true;
               giftEl.scrollIntoView({ behavior: 'smooth' });
@@ -158,19 +161,23 @@ export const AppContent: React.FC = () => {
           }
         } else if (deltaY < 0) {
           if (v1TargetRef.current > 0) {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             v1TargetRef.current = Math.max(0, v1TargetRef.current - step);
             setV1Progress(v1TargetRef.current);
           }
         }
-      } else if (scrollY >= giftTop - 50 && scrollY < restTop - 50) {
+        return;
+      }
+
+      // ZONE 2: Section 2 (Gift Box)
+      if (giftRect.top <= 80 && restRect.top > 80) {
         if (deltaY > 0) {
-          if (v2TargetRef.current < 0.99) {
-            e.preventDefault();
+          if (v2TargetRef.current < 0.98) {
+            if (e.cancelable) e.preventDefault();
             v2TargetRef.current = Math.min(1, v2TargetRef.current + step);
             setV2Progress(v2TargetRef.current);
           } else {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             if (!isTransitioningRef.current) {
               isTransitioningRef.current = true;
               restEl.scrollIntoView({ behavior: 'smooth' });
@@ -181,11 +188,11 @@ export const AppContent: React.FC = () => {
           }
         } else if (deltaY < 0) {
           if (v2TargetRef.current > 0) {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             v2TargetRef.current = Math.max(0, v2TargetRef.current - step);
             setV2Progress(v2TargetRef.current);
           } else {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             if (!isTransitioningRef.current) {
               isTransitioningRef.current = true;
               heroEl.scrollIntoView({ behavior: 'smooth' });
@@ -195,17 +202,32 @@ export const AppContent: React.FC = () => {
             }
           }
         }
+        return;
+      }
+
+      // ZONE 3: Rest of page — allow native scrolling
+      if (restRect.top >= -20 && deltaY < -15) {
+        if (window.scrollY <= restEl.offsetTop + 10) {
+          if (e.cancelable) e.preventDefault();
+          if (!isTransitioningRef.current) {
+            isTransitioningRef.current = true;
+            giftEl.scrollIntoView({ behavior: 'smooth' });
+            setTimeout(() => {
+              isTransitioningRef.current = false;
+            }, 700);
+          }
+        }
       }
     };
 
     window.addEventListener('wheel', handleWheel, { passive: false });
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
 
     return () => {
       window.removeEventListener('wheel', handleWheel);
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
     };
   }, []);
 
@@ -232,13 +254,21 @@ export const AppContent: React.FC = () => {
   const scrollToSectionTwo = () => {
     v1TargetRef.current = 1;
     setV1Progress(1);
-    document.getElementById('section-gift')?.scrollIntoView({ behavior: 'smooth' });
+    const giftEl = document.getElementById('section-gift');
+    if (giftEl) {
+      const top = giftEl.getBoundingClientRect().top + window.pageYOffset;
+      window.scrollTo({ top, behavior: 'smooth' });
+    }
   };
 
   const scrollToRestOfPage = () => {
     v2TargetRef.current = 1;
     setV2Progress(1);
-    document.getElementById('rest-of-page')?.scrollIntoView({ behavior: 'smooth' });
+    const restEl = document.getElementById('rest-of-page');
+    if (restEl) {
+      const top = restEl.getBoundingClientRect().top + window.pageYOffset;
+      window.scrollTo({ top, behavior: 'smooth' });
+    }
   };
 
   return (

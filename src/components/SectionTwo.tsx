@@ -23,10 +23,11 @@ export const SectionTwo: React.FC<SectionTwoProps> = ({
       id="section-gift"
       className="relative h-screen supports-[height:100svh]:h-[100svh] min-h-[580px] w-full overflow-hidden flex flex-col justify-between pt-20 sm:pt-28 pb-12 sm:pb-12 px-4 sm:px-8 md:px-12"
     >
-      {/* Controlled 2.mp4 background strictly for SectionTwo */}
+      {/* Controlled Frame Sequence: 100 frames from /frame/2 */}
       <SectionScrubVideo
-        videoSrc="/2.mp4"
-        posterSrc="/v2_start.jpg"
+        frameFolder="/frame/2"
+        totalFrames={100}
+        posterSrc="/frame/2/frame_001.jpg"
         progress={progress}
         overlayClassName="bg-black/50"
       />

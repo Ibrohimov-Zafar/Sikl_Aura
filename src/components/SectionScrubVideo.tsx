@@ -1,129 +1,141 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 
 interface SectionScrubVideoProps {
-  videoSrc: string;
-  posterSrc: string;
+  frameFolder: string; // e.g. '/frame/1' or '/frame/2'
+  totalFrames?: number; // default 100
+  posterSrc?: string;
   progress: number; // 0.0 to 1.0 controlled progress
   overlayClassName?: string;
   showProgressBar?: boolean;
 }
 
 export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
-  videoSrc,
+  frameFolder,
+  totalFrames = 100,
   posterSrc,
   progress,
   overlayClassName = 'bg-black/45',
   showProgressBar = true,
 }) => {
-  const [isVideoReady, setIsVideoReady] = useState(false);
   const [displayPercent, setDisplayPercent] = useState(0);
+  const [isFirstFrameLoaded, setIsFirstFrameLoaded] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imagesRef = useRef<(HTMLImageElement | null)[]>(new Array(totalFrames).fill(null));
+  const loadedIndicesRef = useRef<Set<number>>(new Set());
   const smoothedProgressRef = useRef(progress);
-  const isPrimedRef = useRef(false);
-  const isSeekingRef = useRef(false);
-  const pendingTargetTimeRef = useRef<number | null>(null);
+  const lastDrawnIndexRef = useRef<number>(-1);
 
-  // Prime / Unlock video for iOS Safari & Android Chrome
-  const primeVideo = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || isPrimedRef.current) return;
+  // Helper to format frame path: frame_001.jpg ... frame_100.jpg
+  const getFrameSrc = useCallback(
+    (index: number) => {
+      const num = String(index + 1).padStart(3, '0');
+      return `${frameFolder}/frame_${num}.jpg`;
+    },
+    [frameFolder]
+  );
 
-    video.muted = true;
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          video.pause();
-          isPrimedRef.current = true;
-          setIsVideoReady(true);
-        })
-        .catch(() => {
-          // Autoplay policy may reject before user interaction; will unlock on first touch
-        });
+  // Draw a specific image to canvas using object-fit: cover
+  const drawImageToCanvas = useCallback((img: HTMLImageElement) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const displayW = canvas.parentElement?.clientWidth || window.innerWidth;
+    const displayH = canvas.parentElement?.clientHeight || window.innerHeight;
+
+    const targetW = Math.round(displayW * dpr);
+    const targetH = Math.round(displayH * dpr);
+
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
     }
+
+    const fw = img.naturalWidth || 1280;
+    const fh = img.naturalHeight || 720;
+    const scale = Math.max(canvas.width / fw, canvas.height / fh);
+    const dw = fw * scale;
+    const dh = fh * scale;
+    const dx = (canvas.width - dw) / 2;
+    const dy = (canvas.height - dh) / 2;
+
+    ctx.drawImage(img, dx, dy, dw, dh);
   }, []);
 
-  // Initialize and prime on mount and on first user interaction
-  useEffect(() => {
-    const video = videoRef.current;
-    if (video) {
-      video.load();
-      primeVideo();
-    }
+  // Preload individual image with cache tracking
+  const preloadImage = useCallback(
+    (index: number): Promise<HTMLImageElement> => {
+      return new Promise((resolve) => {
+        if (imagesRef.current[index]) {
+          resolve(imagesRef.current[index]!);
+          return;
+        }
 
-    const handleFirstInteraction = () => {
-      primeVideo();
+        const img = new Image();
+        img.src = getFrameSrc(index);
+        img.onload = () => {
+          imagesRef.current[index] = img;
+          loadedIndicesRef.current.add(index);
+          if (index === 0) {
+            setIsFirstFrameLoaded(true);
+            drawImageToCanvas(img);
+          }
+          resolve(img);
+        };
+        img.onerror = () => {
+          resolve(img);
+        };
+      });
+    },
+    [getFrameSrc, drawImageToCanvas]
+  );
+
+  // Progressive preloader: loads frame 1 immediately, then throttled batch loading
+  useEffect(() => {
+    let isCancelled = false;
+
+    // 1. Immediately load frame 0
+    preloadImage(0);
+
+    // 2. Progressive background preloader
+    const loadRemainingFrames = async () => {
+      // Load key frames first (every 5th frame for quick responsive scrubbing)
+      for (let i = 4; i < totalFrames; i += 5) {
+        if (isCancelled) return;
+        await preloadImage(i);
+      }
+
+      // Load all other intermediate frames
+      for (let i = 0; i < totalFrames; i++) {
+        if (isCancelled) return;
+        if (!loadedIndicesRef.current.has(i)) {
+          await preloadImage(i);
+        }
+      }
     };
 
-    window.addEventListener('touchstart', handleFirstInteraction, { passive: true, once: true });
-    window.addEventListener('pointerdown', handleFirstInteraction, { passive: true, once: true });
-    window.addEventListener('scroll', handleFirstInteraction, { passive: true, once: true });
+    // Start background load after a tiny pause to give main thread priority
+    const timer = setTimeout(loadRemainingFrames, 100);
 
     return () => {
-      window.removeEventListener('touchstart', handleFirstInteraction);
-      window.removeEventListener('pointerdown', handleFirstInteraction);
-      window.removeEventListener('scroll', handleFirstInteraction);
+      isCancelled = true;
+      clearTimeout(timer);
     };
-  }, [primeVideo, videoSrc]);
+  }, [totalFrames, preloadImage]);
 
-  // Actual seek operation with fastSeek support
-  const doSeek = useCallback((targetTime: number) => {
-    const video = videoRef.current;
-    if (!video || !video.duration || isNaN(video.duration)) return;
-
-    const clampedTime = Math.min(
-      Math.max(0, targetTime),
-      Math.max(0.1, video.duration - 0.05)
-    );
-
-    if (Math.abs(video.currentTime - clampedTime) < 0.02) return;
-
-    if (video.seeking) {
-      pendingTargetTimeRef.current = clampedTime;
-      return;
-    }
-
-    isSeekingRef.current = true;
-    try {
-      if ('fastSeek' in video && typeof (video as any).fastSeek === 'function') {
-        (video as any).fastSeek(clampedTime);
-      } else {
-        video.currentTime = clampedTime;
-      }
-    } catch {
-      video.currentTime = clampedTime;
-    }
-  }, []);
-
-  // Listen to video seeked event to drain pending targets
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const handleSeeked = () => {
-      isSeekingRef.current = false;
-      if (pendingTargetTimeRef.current !== null) {
-        const nextTarget = pendingTargetTimeRef.current;
-        pendingTargetTimeRef.current = null;
-        doSeek(nextTarget);
-      }
-    };
-
-    video.addEventListener('seeked', handleSeeked);
-    return () => video.removeEventListener('seeked', handleSeeked);
-  }, [doSeek]);
-
-  // Smooth lerp animation loop (60fps)
+  // Handle render loop
   useEffect(() => {
     let animId: number;
     let lastPercent = -1;
 
     const render = () => {
-      // Responsive lerp to controlled progress (0.2 for fast immediate mobile tracking)
+      // Lerp smoothed progress
       const smoothed =
         smoothedProgressRef.current +
-        (progress - smoothedProgressRef.current) * 0.22;
+        (progress - smoothedProgressRef.current) * 0.25;
       smoothedProgressRef.current = smoothed;
 
       const currentPct = Math.round(smoothed * 100);
@@ -132,10 +144,38 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
         setDisplayPercent(Math.min(100, Math.max(0, currentPct)));
       }
 
-      const video = videoRef.current;
-      if (video && video.duration && !isNaN(video.duration)) {
-        const targetTime = smoothed * Math.max(0.1, video.duration - 0.05);
-        doSeek(targetTime);
+      // Compute target frame index (0 to totalFrames - 1)
+      const targetIndex = Math.min(
+        totalFrames - 1,
+        Math.max(0, Math.round(smoothed * (totalFrames - 1)))
+      );
+
+      // Draw the exact frame or the nearest loaded frame
+      let frameToDraw: HTMLImageElement | null = imagesRef.current[targetIndex];
+
+      if (!frameToDraw) {
+        // Find nearest loaded frame so the canvas NEVER goes blank
+        let minDiff = Infinity;
+        let bestIndex = -1;
+        loadedIndicesRef.current.forEach((idx) => {
+          const diff = Math.abs(idx - targetIndex);
+          if (diff < minDiff) {
+            minDiff = diff;
+            bestIndex = idx;
+          }
+        });
+
+        if (bestIndex !== -1 && imagesRef.current[bestIndex]) {
+          frameToDraw = imagesRef.current[bestIndex];
+        }
+
+        // Trigger priority load for targetIndex
+        preloadImage(targetIndex);
+      }
+
+      if (frameToDraw && lastDrawnIndexRef.current !== targetIndex) {
+        drawImageToCanvas(frameToDraw);
+        lastDrawnIndexRef.current = targetIndex;
       }
 
       animId = requestAnimationFrame(render);
@@ -143,44 +183,42 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [progress, doSeek]);
+  }, [progress, totalFrames, drawImageToCanvas, preloadImage]);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      const currentFrame =
+        lastDrawnIndexRef.current >= 0
+          ? imagesRef.current[lastDrawnIndexRef.current] || imagesRef.current[0]
+          : imagesRef.current[0];
+      if (currentFrame) {
+        drawImageToCanvas(currentFrame);
+      }
+    };
+
+    window.addEventListener('resize', handleResize, { passive: true });
+    return () => window.removeEventListener('resize', handleResize);
+  }, [drawImageToCanvas]);
 
   return (
     <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none bg-black">
-      {/* Poster image fallback until first video frame renders */}
-      <img
-        src={posterSrc}
-        alt=""
-        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-          isVideoReady ? 'opacity-0' : 'opacity-100'
-        }`}
-      />
+      {/* Static poster image shown until first frame draws */}
+      {posterSrc && (
+        <img
+          src={posterSrc}
+          alt=""
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
+            isFirstFrameLoaded ? 'opacity-0' : 'opacity-100'
+          }`}
+        />
+      )}
 
-      {/* Main hardware-accelerated video element — always in DOM and active */}
-      <video
-        ref={videoRef}
-        src={videoSrc}
-        poster={posterSrc}
-        muted
-        autoPlay={false}
-        playsInline
-        {...{
-          'webkit-playsinline': 'true',
-          'x5-playsinline': 'true',
-        }}
-        preload="auto"
-        onLoadedMetadata={() => {
-          setIsVideoReady(true);
-          primeVideo();
-        }}
-        onCanPlay={() => {
-          setIsVideoReady(true);
-        }}
-        onLoadedData={() => {
-          setIsVideoReady(true);
-        }}
+      {/* Hardware-accelerated smooth canvas */}
+      <canvas
+        ref={canvasRef}
         className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-          isVideoReady ? 'opacity-100' : 'opacity-80'
+          isFirstFrameLoaded ? 'opacity-100' : 'opacity-0'
         }`}
       />
 
