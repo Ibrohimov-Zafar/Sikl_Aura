@@ -14,9 +14,9 @@ const CYCLE_TEXTS: Record<string, string[]> = {
     '100% Mulberry 6A — eng oliy ipak toifasi',
     "Pilladan to tayyor san'atgacha — to'liq ishlab chiqarish sikli",
     "Kattaqo'rg'on — qadimiy Ipak Yo'lining dilidagi fabrika",
-    'Bepul yetkazib berish — butun O\'zbekiston bo\'ylab',
+    "Bepul yetkazib berish — butun O'zbekiston bo'ylab",
     'Antiallergen va teriga foydali tabiiy tolalar',
-    'Eksklyuziv sovg\'a qadoqlash — atlas lenta va mualliflik qutisi',
+    "Eksklyuziv sovg'a qadoqlash — atlas lenta va mualliflik qutisi",
   ],
   ru: [
     'Производим натуральный шёлк в Самарканде с 1999 года',
@@ -49,7 +49,7 @@ export const PageLoader: React.FC<PageLoaderProps> = ({ onComplete }) => {
   const { language } = useLanguage();
 
   const { totalFrames, loadedFrames, isFullyLoaded } = state;
-  const progress = totalFrames > 0 ? Math.round((loadedFrames / totalFrames) * 100) : 0;
+  const progress = totalFrames > 0 ? Math.min(100, Math.round((loadedFrames / totalFrames) * 100)) : 0;
 
   const cycleTexts = useMemo(() => CYCLE_TEXTS[language] || CYCLE_TEXTS.uz, [language]);
 
@@ -152,9 +152,9 @@ export const PageLoader: React.FC<PageLoaderProps> = ({ onComplete }) => {
         </div>
 
         {/* Cycling company info text */}
-        <div className="h-5 flex items-center justify-center overflow-hidden">
+        <div className="min-h-[36px] flex items-center justify-center">
           <p
-            className="text-[11px] sm:text-xs text-white/50 tracking-wide text-center max-w-xs transition-opacity"
+            className="text-[11px] sm:text-xs text-white/50 tracking-wide text-center max-w-xs leading-relaxed transition-opacity"
             style={{ opacity: textOpacity, transitionDuration: '400ms' }}
           >
             {cycleTexts[textIndex]}
