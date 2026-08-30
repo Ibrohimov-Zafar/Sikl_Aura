@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 
 interface SectionScrubVideoProps {
   videoSrc: string;
@@ -15,108 +15,115 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
   overlayClassName = 'bg-black/45',
   showProgressBar = true,
 }) => {
-  const [hasVideoFrame, setHasVideoFrame] = useState(false);
-  const [isFrameCacheReady, setIsFrameCacheReady] = useState(false);
+  const [isVideoReady, setIsVideoReady] = useState(false);
   const [displayPercent, setDisplayPercent] = useState(0);
 
-  const visibleVideoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const framesRef = useRef<ImageBitmap[]>([]);
-  const smoothedProgressRef = useRef(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const smoothedProgressRef = useRef(progress);
+  const isPrimedRef = useRef(false);
+  const isSeekingRef = useRef(false);
+  const pendingTargetTimeRef = useRef<number | null>(null);
 
-  // Frame extraction
+  // Prime / Unlock video for iOS Safari & Android Chrome
+  const primeVideo = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || isPrimedRef.current) return;
+
+    video.muted = true;
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          video.pause();
+          isPrimedRef.current = true;
+          setIsVideoReady(true);
+        })
+        .catch(() => {
+          // Autoplay policy may reject before user interaction; will unlock on first touch
+        });
+    }
+  }, []);
+
+  // Initialize and prime on mount and on first user interaction
   useEffect(() => {
-    let isCancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-
-    const extractFrames = async () => {
-      timer = setTimeout(async () => {
-        if (isCancelled) return;
-
-        try {
-          const offVideo = document.createElement('video');
-          offVideo.muted = true;
-          offVideo.playsInline = true;
-          offVideo.crossOrigin = 'anonymous';
-          offVideo.preload = 'auto';
-          offVideo.src = videoSrc;
-
-          await new Promise<void>((resolve, reject) => {
-            offVideo.onloadedmetadata = () => resolve();
-            offVideo.onerror = (e) => reject(e);
-            offVideo.load();
-          });
-
-          if (isCancelled) return;
-
-          const duration = offVideo.duration || 10;
-          const numFrames = 48;
-          const extracted: ImageBitmap[] = [];
-
-          const vw = offVideo.videoWidth || 1280;
-          const vh = offVideo.videoHeight || 720;
-          const maxWidth = 960;
-          const scale = Math.min(1, maxWidth / vw);
-          const targetW = Math.round(vw * scale);
-          const targetH = Math.round(vh * scale);
-
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = targetW;
-          tempCanvas.height = targetH;
-          const tempCtx = tempCanvas.getContext('2d', { alpha: false });
-
-          if (!tempCtx) throw new Error('Could not create temp context');
-
-          for (let i = 0; i < numFrames; i++) {
-            if (isCancelled) return;
-            const time = (i / (numFrames - 1)) * Math.max(0.1, duration - 0.05);
-
-            await new Promise<void>((resolve) => {
-              const onSeeked = () => {
-                offVideo.removeEventListener('seeked', onSeeked);
-                resolve();
-              };
-              offVideo.addEventListener('seeked', onSeeked);
-              offVideo.currentTime = time;
-            });
-
-            tempCtx.drawImage(offVideo, 0, 0, targetW, targetH);
-            const bitmap = await createImageBitmap(tempCanvas);
-            extracted.push(bitmap);
-          }
-
-          if (!isCancelled && extracted.length > 0) {
-            framesRef.current = extracted;
-            setIsFrameCacheReady(true);
-          }
-        } catch (err) {
-          console.warn(`Frame cache extraction failed for ${videoSrc}, falling back to video seek:`, err);
-        }
-      }, 200);
-    };
-
-    if (hasVideoFrame) {
-      extractFrames();
+    const video = videoRef.current;
+    if (video) {
+      video.load();
+      primeVideo();
     }
 
-    return () => {
-      isCancelled = true;
-      clearTimeout(timer);
-      framesRef.current.forEach((b) => b.close?.());
-      framesRef.current = [];
+    const handleFirstInteraction = () => {
+      primeVideo();
     };
-  }, [hasVideoFrame, videoSrc]);
 
-  // Render & lerp loop
+    window.addEventListener('touchstart', handleFirstInteraction, { passive: true, once: true });
+    window.addEventListener('pointerdown', handleFirstInteraction, { passive: true, once: true });
+    window.addEventListener('scroll', handleFirstInteraction, { passive: true, once: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleFirstInteraction);
+      window.removeEventListener('pointerdown', handleFirstInteraction);
+      window.removeEventListener('scroll', handleFirstInteraction);
+    };
+  }, [primeVideo, videoSrc]);
+
+  // Actual seek operation with fastSeek support
+  const doSeek = useCallback((targetTime: number) => {
+    const video = videoRef.current;
+    if (!video || !video.duration || isNaN(video.duration)) return;
+
+    const clampedTime = Math.min(
+      Math.max(0, targetTime),
+      Math.max(0.1, video.duration - 0.05)
+    );
+
+    if (Math.abs(video.currentTime - clampedTime) < 0.02) return;
+
+    if (video.seeking) {
+      pendingTargetTimeRef.current = clampedTime;
+      return;
+    }
+
+    isSeekingRef.current = true;
+    try {
+      if ('fastSeek' in video && typeof (video as any).fastSeek === 'function') {
+        (video as any).fastSeek(clampedTime);
+      } else {
+        video.currentTime = clampedTime;
+      }
+    } catch {
+      video.currentTime = clampedTime;
+    }
+  }, []);
+
+  // Listen to video seeked event to drain pending targets
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleSeeked = () => {
+      isSeekingRef.current = false;
+      if (pendingTargetTimeRef.current !== null) {
+        const nextTarget = pendingTargetTimeRef.current;
+        pendingTargetTimeRef.current = null;
+        doSeek(nextTarget);
+      }
+    };
+
+    video.addEventListener('seeked', handleSeeked);
+    return () => video.removeEventListener('seeked', handleSeeked);
+  }, [doSeek]);
+
+  // Smooth lerp animation loop (60fps)
   useEffect(() => {
     let animId: number;
     let lastPercent = -1;
 
     const render = () => {
-      // Responsive lerp to controlled progress (0.18 for immediate tracking)
+      // Responsive lerp to controlled progress (0.2 for fast immediate mobile tracking)
       const smoothed =
         smoothedProgressRef.current +
-        (progress - smoothedProgressRef.current) * 0.18;
+        (progress - smoothedProgressRef.current) * 0.22;
       smoothedProgressRef.current = smoothed;
 
       const currentPct = Math.round(smoothed * 100);
@@ -125,47 +132,10 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
         setDisplayPercent(Math.min(100, Math.max(0, currentPct)));
       }
 
-      const canvas = canvasRef.current;
-      const video = visibleVideoRef.current;
-      const frames = framesRef.current;
-
-      if (isFrameCacheReady && canvas && frames.length > 0) {
-        const ctx = canvas.getContext('2d', { alpha: false });
-        if (ctx) {
-          const dpr = Math.min(window.devicePixelRatio || 1, 2);
-          const displayW = canvas.parentElement?.clientWidth || window.innerWidth;
-          const displayH = canvas.parentElement?.clientHeight || window.innerHeight;
-
-          if (canvas.width !== Math.round(displayW * dpr) || canvas.height !== Math.round(displayH * dpr)) {
-            canvas.width = Math.round(displayW * dpr);
-            canvas.height = Math.round(displayH * dpr);
-          }
-
-          const frameIdx = Math.min(
-            frames.length - 1,
-            Math.max(0, Math.floor(smoothed * frames.length))
-          );
-          const frame = frames[frameIdx];
-
-          if (frame) {
-            const cw = canvas.width;
-            const ch = canvas.height;
-            const fw = frame.width;
-            const fh = frame.height;
-            const coverScale = Math.max(cw / fw, ch / fh);
-            const dw = fw * coverScale;
-            const dh = fh * coverScale;
-            const dx = (cw - dw) / 2;
-            const dy = (ch - dh) / 2;
-
-            ctx.drawImage(frame, dx, dy, dw, dh);
-          }
-        }
-      } else if (video && video.duration) {
+      const video = videoRef.current;
+      if (video && video.duration && !isNaN(video.duration)) {
         const targetTime = smoothed * Math.max(0.1, video.duration - 0.05);
-        if (Math.abs(video.currentTime - targetTime) > 0.03) {
-          video.currentTime = targetTime;
-        }
+        doSeek(targetTime);
       }
 
       animId = requestAnimationFrame(render);
@@ -173,42 +143,44 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [progress, isFrameCacheReady]);
+  }, [progress, doSeek]);
 
   return (
-    <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
-      {/* Poster image */}
+    <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none bg-black">
+      {/* Poster image fallback until first video frame renders */}
       <img
         src={posterSrc}
         alt=""
-        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
-          hasVideoFrame || isFrameCacheReady ? 'opacity-0' : 'opacity-100'
+        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
+          isVideoReady ? 'opacity-0' : 'opacity-100'
         }`}
       />
 
-      {/* Visible video fallback */}
+      {/* Main hardware-accelerated video element — always in DOM and active */}
       <video
-        ref={visibleVideoRef}
+        ref={videoRef}
         src={videoSrc}
+        poster={posterSrc}
         muted
+        autoPlay={false}
         playsInline
-        preload="auto"
-        onLoadedData={() => {
-          setHasVideoFrame(true);
-          if (visibleVideoRef.current) {
-            visibleVideoRef.current.currentTime = 0.01;
-          }
+        {...{
+          'webkit-playsinline': 'true',
+          'x5-playsinline': 'true',
         }}
-        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
-          hasVideoFrame && !isFrameCacheReady ? 'opacity-100' : 'opacity-0'
-        }`}
-      />
-
-      {/* Smooth canvas surface */}
-      <canvas
-        ref={canvasRef}
-        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
-          isFrameCacheReady ? 'opacity-100' : 'opacity-0'
+        preload="auto"
+        onLoadedMetadata={() => {
+          setIsVideoReady(true);
+          primeVideo();
+        }}
+        onCanPlay={() => {
+          setIsVideoReady(true);
+        }}
+        onLoadedData={() => {
+          setIsVideoReady(true);
+        }}
+        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
+          isVideoReady ? 'opacity-100' : 'opacity-80'
         }`}
       />
 
