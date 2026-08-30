@@ -1,32 +1,21 @@
-# React + TypeScript + Vite
+# Silk Aura (Sikl_Aura)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+> 100% Tabiiy Ipak Choyshablar va Mahsulotlar (Kattaqo'rg'on · 1999)
+> Royal Uzbek Silk 6A Luxury E-commerce & 3D Interactive Scrub Video Web Application.
 
-Currently, two official plugins are available:
+## Xususiyatlari
+- **3D Interaktiv Video Skroll**: `1.mp4` va `2.mp4` kadrma-kadr video scrub boshqaruvi.
+- **Ko'p tilli (i18n)**: O'zbekcha (UZ), Ruscha (RU), Inglizcha (EN) to'liq qo'llab-quvvatlash va Globus almashtirgich.
+- **Suzuvchi Orolsimon Navbar**: Desktop va mobil uchun maxsus sozlangan shaffof shisha dizayn.
+- **Vercel Tayyor**: `vercel.json` kesh va Range so'rovlari (`Accept-Ranges: bytes`) bilan to'liq sozlangan.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+## Ishga tushirish
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Production Build
+```bash
+npm run build
+```
