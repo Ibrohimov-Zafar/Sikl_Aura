@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <defs>
+    <style>
+      .p-line { fill: none; stroke: #d4af37; stroke-width: 0.8; stroke-opacity: 0.15; }
+      .p-fill { fill: #d4af37; fill-opacity: 0.08; }
+      .p-dot { fill: #d4af37; fill-opacity: 0.25; }
+      .p-accent { fill: none; stroke: #ffffff; stroke-width: 0.6; stroke-opacity: 0.12; }
+    </style>
+  </defs>
+
+  <!-- Central Medallion (Islimiy gul) -->
+  <g transform="translate(60, 60)">
+    <!-- 8-pointed star rosette -->
+    <circle cx="0" cy="0" r="3" class="p-dot" />
+    <circle cx="0" cy="0" r="8" class="p-line" />
+    <circle cx="0" cy="0" r="18" class="p-accent" stroke-dasharray="2 2" />
+
+    <!-- Center Petals (Poyvand barglar) -->
+    <path d="M 0,-18 C 6,-12 6,-6 0,0 C -6,-6 -6,-12 0,-18 Z" class="p-fill" />
+    <path d="M 0,18 C 6,12 6,6 0,0 C -6,6 -6,12 0,18 Z" class="p-fill" />
+    <path d="M -18,0 C -12,6 -6,6 0,0 C -6,-6 -12,-6 -18,0 Z" class="p-fill" />
+    <path d="M 18,0 C 12,6 6,6 0,0 C 6,-6 12,-6 18,0 Z" class="p-fill" />
+
+    <!-- Diagonal Leaves -->
+    <path d="M -12,-12 C -7,-5 -5,-7 0,0 C -7,-5 -5,-7 -12,-12 Z" class="p-line" />
+    <path d="M 12,-12 C 7,-5 5,-7 0,0 C 7,-5 5,-7 12,-12 Z" class="p-line" />
+    <path d="M -12,12 C -7,5 -5,7 0,0 C -7,5 -5,7 -12,12 Z" class="p-line" />
+    <path d="M 12,12 C 7,5 5,7 0,0 C 7,5 5,7 12,12 Z" class="p-line" />
+
+    <!-- Surrounding Arabesque Arch Loops -->
+    <path d="M 0,-28 C 16,-28 28,-16 28,0 C 28,16 16,28 0,28 C -16,28 -28,16 -28,0 C -28,-16 -16,-28 0,-28 Z" class="p-line" />
+    
+    <!-- Outer Palmette Tips -->
+    <path d="M 0,-28 Q 0,-38 0,-42 Q -6,-34 0,-28 Q 6,-34 0,-42" class="p-line" />
+    <path d="M 0,28 Q 0,38 0,42 Q -6,34 0,28 Q 6,34 0,42" class="p-line" />
+    <path d="M -28,0 Q -38,0 -42,0 Q -34,-6 -28,0 Q -34,6 -42,0" class="p-line" />
+    <path d="M 28,0 Q 38,0 42,0 Q 34,-6 28,0 Q 34,6 42,0" class="p-line" />
+  </g>
+
+  <!-- Seamless Corners: Top-Left (0, 0) -->
+  <g transform="translate(0, 0)">
+    <circle cx="0" cy="0" r="16" class="p-line" />
+    <circle cx="0" cy="0" r="2" class="p-dot" />
+    <path d="M 0,16 C 6,10 10,6 16,0" class="p-accent" />
+    <path d="M 12,12 C 18,18 24,14 26,8" class="p-line" />
+    <path d="M 12,12 C 18,18 14,24 8,26" class="p-line" />
+  </g>
+
+  <!-- Seamless Corners: Top-Right (120, 0) -->
+  <g transform="translate(120, 0)">
+    <circle cx="0" cy="0" r="16" class="p-line" />
+    <circle cx="0" cy="0" r="2" class="p-dot" />
+    <path d="M 0,16 C -6,10 -10,6 -16,0" class="p-accent" />
+    <path d="M -12,12 C -18,18 -24,14 -26,8" class="p-line" />
+    <path d="M -12,12 C -18,18 -14,24 -8,26" class="p-line" />
+  </g>
+
+  <!-- Seamless Corners: Bottom-Left (0, 120) -->
+  <g transform="translate(0, 120)">
+    <circle cx="0" cy="0" r="16" class="p-line" />
+    <circle cx="0" cy="0" r="2" class="p-dot" />
+    <path d="M 0,-16 C 6,-10 10,-6 16,0" class="p-accent" />
+    <path d="M 12,-12 C 18,-18 24,-14 26,-8" class="p-line" />
+    <path d="M 12,-12 C 18,-18 14,-24 8,-26" class="p-line" />
+  </g>
+
+  <!-- Seamless Corners: Bottom-Right (120, 120) -->
+  <g transform="translate(120, 120)">
+    <circle cx="0" cy="0" r="16" class="p-line" />
+    <circle cx="0" cy="0" r="2" class="p-dot" />
+    <path d="M 0,-16 C -6,-10 -10,-6 -16,0" class="p-accent" />
+    <path d="M -12,-12 C -18,-18 -24,-14 -26,-8" class="p-line" />
+    <path d="M -12,-12 C -18,-18 -14,-24 -8,-26" class="p-line" />
+  </g>
+
+  <!-- Connecting Filigree Tendrils -->
+  <path d="M 60,18 C 45,18 35,8 35,0" class="p-line" />
+  <path d="M 60,18 C 75,18 85,8 85,0" class="p-line" />
+  <path d="M 60,102 C 45,102 35,112 35,120" class="p-line" />
+  <path d="M 60,102 C 75,102 85,112 85,120" class="p-line" />
+  <path d="M 18,60 C 18,45 8,35 0,35" class="p-line" />
+  <path d="M 18,60 C 18,75 8,85 0,85" class="p-line" />
+  <path d="M 102,60 C 102,45 112,35 120,35" class="p-line" />
+  <path d="M 102,60 C 102,75 112,85 120,85" class="p-line" />
+
+  <!-- Subtle Accent Dots -->
+  <circle cx="60" cy="18" r="1.5" class="p-dot" />
+  <circle cx="60" cy="102" r="1.5" class="p-dot" />
+  <circle cx="18" cy="60" r="1.5" class="p-dot" />
+  <circle cx="102" cy="60" r="1.5" class="p-dot" />
+</svg>
