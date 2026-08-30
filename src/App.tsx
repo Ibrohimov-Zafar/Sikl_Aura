@@ -12,6 +12,7 @@ import { Footer } from './components/Footer';
 import { OrderModal } from './components/OrderModal';
 import { PageLoader } from './components/PageLoader';
 import { LanguageProvider } from './i18n/LanguageContext';
+import { LoadingProvider } from './i18n/LoadingContext';
 
 export const AppContent: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -353,7 +354,9 @@ export const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <LanguageProvider>
-      <AppContent />
+      <LoadingProvider>
+        <AppContent />
+      </LoadingProvider>
     </LanguageProvider>
   );
 };

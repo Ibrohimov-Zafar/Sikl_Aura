@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useLoading } from '../i18n/LoadingContext';
 
 interface SectionScrubVideoProps {
   frameFolder: string; // e.g. '/frame/1' or '/frame/2'
@@ -19,9 +20,6 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
 }) => {
   const [displayPercent, setDisplayPercent] = useState(0);
   const [isFirstFrameLoaded, setIsFirstFrameLoaded] = useState(false);
-  const [loadedCount, setLoadedCount] = useState(0);
-  const [isFullyLoaded, setIsFullyLoaded] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imagesRef = useRef<(HTMLImageElement | null)[]>(new Array(totalFrames).fill(null));
@@ -29,6 +27,10 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
   const loadFailedIndicesRef = useRef<Set<number>>(new Set());
   const smoothedProgressRef = useRef(progress);
   const lastDrawnIndexRef = useRef<number>(-1);
+  const reportedCountRef = useRef(0);
+  const sectionIdRef = useRef<number | null>(null);
+
+  const { registerSection, reportLoaded, markSectionDone } = useLoading();
 
   // Helper to format frame path: frame_001.jpg ... frame_100.jpg
   const getFrameSrc = useCallback(
@@ -96,7 +98,9 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
           imagesRef.current[index] = img;
           loadedIndicesRef.current.add(index);
           loadFailedIndicesRef.current.delete(index);
-          setLoadedCount((c) => c + 1);
+          // Report to global loading context
+          reportedCountRef.current += 1;
+          reportLoaded(1);
           if (index === 0) {
             setIsFirstFrameLoaded(true);
             drawImageToCanvas(img);
@@ -124,6 +128,11 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
   useEffect(() => {
     let isCancelled = false;
 
+    // Register this section's total frames with the global loader
+    if (sectionIdRef.current === null) {
+      sectionIdRef.current = registerSection(totalFrames);
+    }
+
     // 1. Immediately load frame 0
     preloadImage(0);
 
@@ -143,14 +152,9 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
         }
       }
 
-      // Mark as fully loaded (even if some failed)
-      if (!isCancelled) {
-        setIsFullyLoaded(true);
-        // Check if too many frames failed
-        const failedCount = loadFailedIndicesRef.current.size;
-        if (failedCount > totalFrames * 0.5) {
-          setLoadFailed(true);
-        }
+      // Mark this section as done in global context
+      if (!isCancelled && sectionIdRef.current !== null) {
+        markSectionDone(sectionIdRef.current);
       }
     };
 
@@ -161,7 +165,7 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
       isCancelled = true;
       clearTimeout(timer);
     };
-  }, [totalFrames, preloadImage]);
+  }, [totalFrames, preloadImage, registerSection, markSectionDone]);
 
   // Handle render loop
   useEffect(() => {
@@ -238,8 +242,6 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, [drawImageToCanvas]);
 
-  const loadProgress = totalFrames > 0 ? Math.round((loadedCount / totalFrames) * 100) : 0;
-
   return (
     <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none bg-black">
       {/* Static poster image shown until first frame draws */}
@@ -260,45 +262,6 @@ export const SectionScrubVideo: React.FC<SectionScrubVideoProps> = ({
           isFirstFrameLoaded ? 'opacity-100' : 'opacity-0'
         }`}
       />
-
-      {/* Loading indicator — shown while frames are loading */}
-      {!isFullyLoaded && loadedCount > 0 && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
-          <div className="flex flex-col items-center gap-2 rounded-xl bg-black/60 border border-white/15 px-4 py-3 backdrop-blur-sm">
-            <div className="h-1 w-20 rounded-full bg-white/20 overflow-hidden">
-              <div
-                className="h-full bg-white/80 transition-all duration-500 rounded-full"
-                style={{ width: `${loadProgress}%` }}
-              />
-            </div>
-            <span className="font-mono text-[10px] text-white/70 select-none">
-              {loadProgress < 100 ? `${loadProgress}%` : 'Tayyor'}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Full-load failure notice — shown if too many frames failed */}
-      {loadFailed && posterSrc && (
-        <div className="absolute inset-0 z-30 pointer-events-none">
-          <img
-            src={posterSrc}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover opacity-100"
-          />
-          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 rounded-xl bg-black/60 border border-white/15 px-4 py-3 backdrop-blur-sm">
-            <span className="text-[11px] text-white/80 text-center">
-              Internet ulanishi sekin. Yuklanmoqda...
-            </span>
-            <div className="h-1 w-24 rounded-full bg-white/20 overflow-hidden">
-              <div
-                className="h-full bg-white/60 rounded-full animate-pulse"
-                style={{ width: `${loadProgress}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Dark contrast overlay for crystal clear text */}
       <div className={`absolute inset-0 ${overlayClassName} pointer-events-none`} />
